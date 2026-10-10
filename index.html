@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FaceCam AI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#07090d;color:white;font-family:system-ui;padding:12px}.app{max-width:1000px;margin:auto}.top{display:flex;justify-content:space-between;padding:8px 4px 14px}.logo{font-weight:900;letter-spacing:.12em}.pill{font-size:11px;border:1px solid #29313b;border-radius:99px;padding:6px 9px;color:#aab4c0}.grid{display:grid;grid-template-columns:1.5fr .8fr;gap:14px}.card{background:#0e1218;border:1px solid #202832;border-radius:18px;padding:12px}.stage{position:relative;aspect-ratio:3/4;background:#000;border-radius:14px;overflow:hidden}video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}video{transform:scaleX(-1)}canvas{display:block}.live{position:absolute;z-index:2;top:10px;left:10px;background:#d9ff5a;color:#111800;border-radius:99px;padding:6px 9px;font-size:11px;font-weight:900}.status{position:absolute;z-index:2;bottom:10px;left:10px;right:10px;background:#000b;border-radius:10px;padding:9px;font-size:12px}.controls{display:flex;gap:7px;margin-top:10px}.btn{flex:1;border:0;border-radius:10px;padding:11px;font-weight:800;background:#1b222c;color:white}.primary{background:#d9ff5a;color:#111800}label{display:block;color:#9ba6b3;font-size:12px;margin:12px 0 6px}input,select{max-width:100%}.preview{width:100%;aspect-ratio:1;object-fit:cover;background:#07090d;border-radius:12px}.help{font-size:12px;line-height:1.45;color:#8995a3}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<div class="app"><div class="top"><div class="logo">FACECAM AI</div><div class="pill">REAL-TIME DEMO</div></div>
+<div class="grid"><section class="card"><div class="stage"><video id="video" autoplay muted playsinline></video><canvas id="out"></canvas><div class="live">● LIVE</div><div id="status" class="status">Upload a face photo, then start the camera.</div></div>
+<div class="controls"><button id="start" class="btn primary">Start Camera</button><button id="flip" class="btn">Switch</button><button id="capture" class="btn">Capture</button></div></section>
+<aside class="card"><label>Face photo</label><input id="file" type="file" accept="image/*"><img id="preview" class="preview">
+<label>Swap strength</label><input id="strength" type="range" min="0" max="100" value="88" style="width:100%">
+<label>Blend softness</label><input id="soft" type="range" min="0" max="30" value="12" style="width:100%">
+<label>Mode</label><select id="mode" style="width:100%;padding:9px;background:#171d25;color:white;border:1px solid #29323d;border-radius:9px"><option value="natural">Natural</option><option value="mono">Mono</option><option value="warm">Warm</option></select>
+<p class="help">This is an original on-device face overlay demo. It tracks the largest detected face when your browser provides the FaceDetector API. Use only photos you have permission to use.</p></aside></div></div>
+<script>
+const v=document.getElementById('video'),c=document.getElementById('out'),x=c.getContext('2d'),st=document.getElementById('status');
+let stream,side='user',img=null,detector=null,box=null,detecting=false,running=false;
+function msg(s){st.textContent=s}
+function size(){if(v.videoWidth){c.width=v.videoWidth;c.height=v.videoHeight}}
+async function start(){
+try{if(stream)stream.getTracks().forEach(t=>t.stop());stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:side},width:{ideal:1280},height:{ideal:720}},audio:false});v.srcObject=stream;await v.play();size();
+detector=null;if('FaceDetector' in window){try{detector=new FaceDetector({fastMode:true,maxDetectedFaces:1})}catch(e){}}
+running=true;msg(detector?'Camera live — tracking your face.':'Camera live — this browser does not provide automatic face tracking.');requestAnimationFrame(loop)
+}catch(e){msg('Camera failed. Use HTTPS and allow camera permission.')}}
+function base(){x.save();x.translate(c.width,0);x.scale(-1,1);x.drawImage(v,0,0,c.width,c.height);x.restore()}
+async function detect(){if(!detector||v.readyState<2)return null;try{let a=await detector.detect(v);if(!a.length)return null;let b=a[0].boundingBox;return{x:b.x,y:b.y,w:b.width,h:b.height}}catch(e){return null}}
+function overlay(b){
+if(!img)return;let xx=c.width-b.x-b.w,yy=b.y,s=+document.getElementById('strength').value/100,p=.28+(+document.getElementById('soft').value/100)*.25,w=b.w*(1+2*p),h=b.h*(1+2*p),dx=xx-b.w*p,dy=yy-b.h*p*.75;
+x.save();x.globalAlpha=s;x.beginPath();x.roundRect(dx,dy,w,h,Math.min(w,h)*.42);x.clip();
+let ar=img.width/img.height,dw=w,dh=w/ar;if(dh<h){dh=h;dw=h*ar}x.drawImage(img,dx+(w-dw)/2,dy+(h-dh)/2,dw,dh);
+if(document.getElementById('mode').value==='warm'){x.globalCompositeOperation='screen';x.fillStyle='rgba(255,150,70,.12)';x.fillRect(dx,dy,w,h)}
+if(document.getElementById('mode').value==='mono'){x.globalCompositeOperation='saturation';x.fillStyle='#777';x.fillRect(dx,dy,w,h)}
+x.restore()}
+async function loop(){if(!running)return;size();base();if(img&&detector&&!detecting){detecting=true;let b=await detect();detecting=false;if(b)box=b}if(img&&box)overlay(box);requestAnimationFrame(loop)}
+document.getElementById('file').onchange=e=>{let f=e.target.files[0];if(!f)return;img=new Image();img.onload=()=>msg(detector?'Face loaded — move into view.':'Face loaded.');img.src=URL.createObjectURL(f);document.getElementById('preview').src=img.src};
+document.getElementById('start').onclick=start;document.getElementById('flip').onclick=()=>{side=side==='user'?'environment':'user';start()};document.getElementById('capture').onclick=()=>{let a=document.createElement('a');a.download='facecam-realtime.png';a.href=c.toDataURL('image/png');a.click()};
+</script></body></html>
